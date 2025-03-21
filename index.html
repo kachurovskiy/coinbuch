@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>coinbuch</title>
+  <link rel="icon" href="data:,">
+</head>
+
+<body>
+  <h1>📖 coinbuch</h1>
+  <p>
+    Open-source tool for analysing Coinbase transaction log.
+    <a href="https://github.com/kachurovskiy/coinbuch/">Learn more on GitHub</a>
+  </p>
+  <p>
+    Transactions CSV from <a href="https://accounts.coinbase.com/statements">accounts.coinbase.com/statements</a>: <input type="file" id="transactionInput" accept=".csv"/>
+  </p>
+  <div id="transactionOutput"></div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+
+</html>
