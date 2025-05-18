@@ -17,41 +17,61 @@ export class SectionGroups {
 
   private renderGroup(transactions: Transaction[]): HTMLDivElement {
     const result = document.createElement('div');
-
     result.classList.add('transactionGroup');
+
     if (transactions.length === 0) return result;
+
     transactions.sort((a, b) => a.time.getTime() - b.time.getTime());
     const firstTransaction = transactions[0];
     result.dataset.sortKey = `${CashAsset.includes(firstTransaction.asset) || StableCoin.includes(firstTransaction.asset) ? 0 : 1}-${firstTransaction.asset}`;
 
-    // Header
+    this.renderGroupHeader(result, firstTransaction);
+    const table = this.createTableStructure(result);
+    this.renderTableHeader(table, firstTransaction);
+    this.renderTableBody(table, transactions, firstTransaction);
+    this.renderTableFooter(table, transactions, firstTransaction);
+    this.renderGainLossByYear(result, transactions);
+
+    return result;
+  }
+
+  private renderGroupHeader(parentElement: HTMLElement, firstTransaction: Transaction): void {
     const titleElement = document.createElement('h2');
     titleElement.innerText = getGroupKey(firstTransaction);
     titleElement.id = firstTransaction.asset;
-    result.appendChild(titleElement);
+    parentElement.appendChild(titleElement);
+  }
 
+  private createTableStructure(parentElement: HTMLElement): HTMLTableElement {
     const table = document.createElement('table');
     const tableScroller = document.createElement('div');
     tableScroller.classList.add('tableScroller');
     tableScroller.appendChild(table);
-    result.appendChild(tableScroller);
+    parentElement.appendChild(tableScroller);
+    return table;
+  }
 
-    // Table header.
+  private renderTableHeader(table: HTMLTableElement, firstTransaction: Transaction): void {
     const thead = document.createElement('thead');
     const headerRow = document.createElement('tr');
     thead.appendChild(headerRow);
     table.appendChild(thead);
+
     const priceCurrency = firstTransaction.priceCurrency;
-    const headers = ['Time', 'Type', 'Quantity ' + firstTransaction.asset, 'Price ' + priceCurrency, 'Fee ' + priceCurrency, 'Total ' + priceCurrency, 'Gain/Loss ' + priceCurrency];
+    const headers = ['Time', 'Type', `Quantity ${firstTransaction.asset}`, `Price ${priceCurrency}`, `Fee ${priceCurrency}`, `Total ${priceCurrency}`, `Gain/Loss ${priceCurrency}`];
     for (const header of headers) {
       const th = document.createElement('th');
       th.innerText = header;
       if (isNumericHeader(header)) th.classList.add('numeric');
       headerRow.appendChild(th);
     }
+  }
 
-    // Transactions for this group.
+  private renderTableBody(table: HTMLTableElement, transactions: Transaction[], firstTransaction: Transaction): void {
     const groupSign = CashAsset.includes(firstTransaction.asset) || StableCoin.includes(firstTransaction.asset) ? 1 : -1;
+    const priceCurrency = firstTransaction.priceCurrency;
+    const headers = ['Time', 'Type', `Quantity ${firstTransaction.asset}`, `Price ${priceCurrency}`, `Fee ${priceCurrency}`, `Total ${priceCurrency}`, `Gain/Loss ${priceCurrency}`]; // Re-define or pass headers
+
     for (const transaction of transactions) {
       const row = document.createElement('tr');
       row.title = transaction.raw;
@@ -80,47 +100,33 @@ export class SectionGroups {
         row.appendChild(td);
       }
     }
+  }
 
-    // Remaining shares and sum of amounts
+  private renderTableFooter(table: HTMLTableElement, transactions: Transaction[], firstTransaction: Transaction): void {
     const totalRow = document.createElement('tr');
     totalRow.classList.add('totalRow');
     table.appendChild(totalRow);
-    const totalCell = document.createElement('td');
-    totalCell.innerText = 'Total';
-    totalRow.appendChild(totalCell);
+
+    totalRow.appendChild(this.createTd('Total'));
     totalRow.appendChild(document.createElement('td')); // Type
-    const remainingQuantity = document.createElement('td');
+
     const sharesSum = getRemainingQuantity(transactions);
-    if (sharesSum) {
-      remainingQuantity.innerText = sharesSum.toFixed(2);
-    }
-    totalRow.appendChild(remainingQuantity);
+    totalRow.appendChild(this.createNumericTd(sharesSum, 2, false)); // Quantity
+
     totalRow.appendChild(document.createElement('td')); // Price
 
-    const totalFee = document.createElement('td');
     const totalFeeSum = transactions.reduce((total, t) => total + t.fee, 0);
-    if (totalFeeSum) {
-      totalFee.innerText = totalFeeSum.toFixed(2);
-      totalFee.classList.add(totalFeeSum > 0 ? 'positive' : 'negative');
-    }
-    totalRow.appendChild(totalFee);
+    totalRow.appendChild(this.createNumericTd(totalFeeSum, 2, true)); // Fee
 
-    const totalAmount = document.createElement('td');
+    const groupSign = CashAsset.includes(firstTransaction.asset) || StableCoin.includes(firstTransaction.asset) ? 1 : -1;
     const totalAmountSum = transactions.reduce((total, t) => total + t.total * (TransactionNegativeTypes.includes(t.type) ? -1 : 1) * groupSign, 0);
-    if (totalAmountSum) {
-      totalAmount.innerText = totalAmountSum.toFixed(2);
-      totalAmount.classList.add(totalAmountSum > 0 ? 'positive' : 'negative');
-    }
-    totalRow.appendChild(totalAmount);
+    totalRow.appendChild(this.createNumericTd(totalAmountSum, 2, true)); // Total Amount
 
-    const totalGainLoss = document.createElement('td');
     const gainLossSum = transactions.reduce((total, t) => total + t.gainOrLoss, 0);
-    if (gainLossSum) {
-      totalGainLoss.innerText = gainLossSum.toFixed(2);
-      totalGainLoss.classList.add(gainLossSum > 0 ? 'positive' : 'negative');
-    }
-    totalRow.appendChild(totalGainLoss);
+    totalRow.appendChild(this.createNumericTd(gainLossSum, 2, true)); // Gain/Loss
+  }
 
+  private renderGainLossByYear(parentElement: HTMLElement, transactions: Transaction[]): void {
     const gainLossPerYear = new Map<number, number>();
     for (const transaction of transactions) {
       if (transaction.gainOrLoss === 0) continue;
@@ -129,36 +135,49 @@ export class SectionGroups {
       gainLossPerYear.set(year, gainLoss + transaction.gainOrLoss);
     }
 
-    if (gainLossPerYear.size > 0) {
-      const gainLossHeader = document.createElement('br');
-      result.appendChild(gainLossHeader);
-      const gainTable = document.createElement('table');
-      result.appendChild(gainTable);
-      const gainThead = document.createElement('thead');
-      const gainHeaderRow = document.createElement('tr');
-      gainThead.appendChild(gainHeaderRow);
-      gainTable.appendChild(gainThead);
-      const gainHeaders = ['Year', 'Gain/Loss'];
-      for (const header of gainHeaders) {
-        const th = document.createElement('th');
-        th.innerText = header;
-        if (isNumericHeader(header)) th.classList.add('numeric');
-        gainHeaderRow.appendChild(th);
-      }
-      for (const [year, gainLoss] of gainLossPerYear) {
-        const row = document.createElement('tr');
-        gainTable.appendChild(row);
-        const yearCell = document.createElement('td');
-        yearCell.innerText = String(year);
-        row.appendChild(yearCell);
-        const gainLossCell = document.createElement('td');
-        gainLossCell.innerText = gainLoss.toFixed(2);
-        gainLossCell.classList.add(gainLoss > 0 ? 'positive' : 'negative');
-        row.appendChild(gainLossCell);
-      }
+    if (gainLossPerYear.size === 0) return;
+
+    parentElement.appendChild(document.createElement('br'));
+    const gainTable = document.createElement('table');
+    parentElement.appendChild(gainTable);
+
+    const gainThead = document.createElement('thead');
+    const gainHeaderRow = document.createElement('tr');
+    gainThead.appendChild(gainHeaderRow);
+    gainTable.appendChild(gainThead);
+
+    const gainHeaders = ['Year', 'Gain/Loss'];
+    for (const header of gainHeaders) {
+      const th = document.createElement('th');
+      th.innerText = header;
+      if (isNumericHeader(header)) th.classList.add('numeric');
+      gainHeaderRow.appendChild(th);
     }
 
-    return result;
+    for (const [year, gainLoss] of gainLossPerYear) {
+      const row = document.createElement('tr');
+      gainTable.appendChild(row);
+      row.appendChild(this.createTd(String(year)));
+      row.appendChild(this.createNumericTd(gainLoss, 2, true));
+    }
+  }
+
+  private createTd(text: string): HTMLTableCellElement {
+    const td = document.createElement('td');
+    td.innerText = text;
+    return td;
+  }
+
+  private createNumericTd(value: number | undefined | null,toFixed: number, addSignClass: boolean): HTMLTableCellElement {
+    const td = document.createElement('td');
+    if (value) {
+      td.innerText = value.toFixed(toFixed);
+      td.classList.add('numeric');
+      if (addSignClass) {
+        td.classList.add(value > 0 ? 'positive' : 'negative');
+      }
+    }
+    return td;
   }
 }
 
