@@ -1,4 +1,4 @@
-import { CurrencyExchangeAPI, printCurrency } from "./currency";
+import { CurrencyExchangeAPI, needsCurrencyConversion, printCurrency } from "./currency";
 import { Transaction, CashAsset, TransactionNegativeTypes, StableCoin } from "./interfaces";
 import { isNumericHeader } from "./parser";
 import { getRemainingQuantity } from "./processor";
@@ -14,9 +14,7 @@ export class SectionGroup {
 
     this.firstTransaction = transactions[0];
     this.priceCurrency = this.firstTransaction.priceCurrency;
-    this.needsCurrencyConversion =
-      this.firstTransaction.priceCurrency !== this.exchange.targetCurrency &&
-      this.firstTransaction.asset !== this.exchange.targetCurrency;
+    this.needsCurrencyConversion = needsCurrencyConversion(this.firstTransaction, this.exchange.targetCurrency);
     this.headers = [
       'Time',
       'Type',

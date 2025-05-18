@@ -59,3 +59,7 @@ export async function fetchCurrencyExchangeRate(currency: string, transactions: 
 export function printCurrency(currency: string): string {
   return CashSymbol.get(currency) || currency;
 }
+
+export function needsCurrencyConversion(firstTransaction: Transaction, targetCurrency: string): boolean {
+  return firstTransaction.priceCurrency !== targetCurrency && firstTransaction.asset !== targetCurrency;
+}

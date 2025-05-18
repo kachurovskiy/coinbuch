@@ -46,8 +46,8 @@ async function renderTransactionFile(file: TransactionFile) {
   });
   outputElement.replaceChildren(
     new SectionErrors().render(model),
-    new SectionYears('Years').render(model),
-    new SectionGroups().render(model),
+    new SectionYears(model).render(),
+    new SectionGroups(model).render(),
   );
 }
 

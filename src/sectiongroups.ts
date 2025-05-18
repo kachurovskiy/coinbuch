@@ -2,12 +2,16 @@ import { DataModel, Transaction, CashAsset, StableCoin, TransactionBuyTypes, Tra
 import { SectionGroup } from "./sectiongroup";
 
 export class SectionGroups {
-  render(model: DataModel): HTMLDivElement {
+  constructor(
+    private readonly model: DataModel,
+  ) {}
+
+  render(): HTMLDivElement {
     const div = document.createElement('div');
-    const groups = groupTransactions(model.executedTransactions);
+    const groups = groupTransactions(this.model.executedTransactions);
     const groupChildren: HTMLElement[] = [];
     for (const [groupKey, group] of groups) {
-      groupChildren.push(new SectionGroup(groupKey, group, model.exchange).renderGroup());
+      groupChildren.push(new SectionGroup(groupKey, group, this.model.exchange).renderGroup());
     }
     groupChildren.sort((a, b) => a.dataset.sortKey!.localeCompare(b.dataset.sortKey!));
     div.replaceChildren(... groupChildren);
