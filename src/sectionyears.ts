@@ -46,7 +46,7 @@ export class SectionYears {
     securityTable.appendChild(securityThead);
     const securityHeaderRow = document.createElement('tr');
     securityThead.appendChild(securityHeaderRow);
-    const securityHeaders = ['Security', 'Gain/Loss ' + transactions[0].priceCurrency];
+    const securityHeaders = ['Security', 'Gain ' + transactions[0].priceCurrency];
     for (const header of securityHeaders) {
       const th = document.createElement('th');
       th.innerText = header;

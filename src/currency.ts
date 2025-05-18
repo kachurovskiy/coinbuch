@@ -1,4 +1,4 @@
-import { Transaction } from "./interfaces";
+import { CashSymbol, Transaction } from "./interfaces";
 
 export interface CurrencyExchangeAPI {
   targetCurrency: string;
@@ -54,4 +54,8 @@ export async function fetchCurrencyExchangeRate(currency: string, transactions: 
       return 1 / exchangeRates[date];
     },
   };
+}
+
+export function printCurrency(currency: string): string {
+  return CashSymbol.get(currency) || currency;
 }

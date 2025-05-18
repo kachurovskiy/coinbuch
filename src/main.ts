@@ -14,6 +14,7 @@ for (const asset of CashAsset.concat().sort()) {
   const option = document.createElement('option');
   option.value = asset;
   option.innerText = asset;
+  option.selected = asset === 'EUR';
   currencySelectElement.appendChild(option);
 }
 

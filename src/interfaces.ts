@@ -27,6 +27,20 @@ export const CashAsset = [
   'SGD',
   'USD',
 ];
+export const CashSymbol: Map<string, string> = new Map([
+  ['AUD', 'A$'],
+  ['CAD', 'C$'],
+  ['CHF', 'CHF'],
+  ['CNY', '¥'],
+  ['EUR', '€'],
+  ['GBP', '£'],
+  ['HKD', '$'],
+  ['JPY', '¥'],
+  ['KRW', '₩'],
+  ['NZD', 'NZ$'],
+  ['SGD', 'SGD'],
+  ['USD', '$'],
+]);
 export const StableCoin = [
   'USDC',
   'USDT',
