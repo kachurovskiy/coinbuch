@@ -11,7 +11,7 @@ export async function fetchCurrencyExchangeRate(currency: string, transactions: 
     return {
       targetCurrency: 'USD',
       convertFromUSD: (amount: number): number => amount,
-      getExchangeRateFromUSD: (date: string): number | undefined => 1,
+      getExchangeRateFromUSD: (): number | undefined => 1,
     };
   }
 
