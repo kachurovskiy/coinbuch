@@ -1,10 +1,21 @@
 import './style.css'
 import { parseTransactionFile } from './parser';
-import { TransactionFile } from './interfaces';
+import { CashAsset, TransactionFile } from './interfaces';
 import { SectionErrors } from './sectionerrors';
 import { SectionYears } from './sectionyears';
 import { prepareDataModel } from './processor';
 import { SectionGroups } from './sectiongroups';
+
+const outputElement = document.getElementById('transactionOutput') as HTMLDivElement;
+const checkboxElement = document.getElementById('calculateGainLoss') as HTMLInputElement;
+const currencySelectElement = document.getElementById('currencySelect') as HTMLSelectElement;
+for (const asset of CashAsset.concat().sort()) {
+  if (asset === 'USD') continue;
+  const option = document.createElement('option');
+  option.value = asset;
+  option.innerText = asset;
+  currencySelectElement.appendChild(option);
+}
 
 const inputElement = document.getElementById('transactionInput') as HTMLInputElement;
 inputElement.addEventListener('change', readFile);
@@ -14,9 +25,9 @@ function readFile() {
   const file = files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = () => {
+  reader.onload = async () => {
     try {
-      renderTransactionFile(parseTransactionFile(reader.result as string));
+      await renderTransactionFile(parseTransactionFile(reader.result as string));
     } catch (e) {
       alert(`Error parsing file: ${e}`);
     }
@@ -28,12 +39,20 @@ function readFile() {
 }
 readFile();
 
-function renderTransactionFile(file: TransactionFile) {
-  const model = prepareDataModel(file);
-  const outputElement = document.getElementById('transactionOutput')!;
+async function renderTransactionFile(file: TransactionFile) {
+  const model = await prepareDataModel(file, getEffectiveCurrency(), (progress: string) => {
+    outputElement.innerText = progress;
+  });
   outputElement.replaceChildren(
     new SectionErrors().render(model),
     new SectionYears('Years').render(model),
     new SectionGroups().render(model),
   );
+}
+
+function getEffectiveCurrency() {
+  if (!checkboxElement.checked) {
+    return 'USD';
+  }
+  return currencySelectElement.value || 'USD';
 }

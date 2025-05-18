@@ -1,3 +1,5 @@
+import { CurrencyExchangeAPI } from "./currency";
+
 export interface TransactionFile {
   transactions: Transaction[];
   errors: string[];
@@ -56,6 +58,7 @@ export interface Transaction {
 export interface DataModel {
   file: TransactionFile;
   executedTransactions: Transaction[];
+  exchange: CurrencyExchangeAPI;
 }
 
 export interface SectionRenderer {

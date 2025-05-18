@@ -1,10 +1,12 @@
+import { fetchCurrencyExchangeRate } from "./currency";
 import { DataModel, Transaction, TransactionFile, TransactionSellTypes, TransactionBuyTypes, Epsilon, TransactionPositiveTypes, TransactionNegativeTypes } from "./interfaces";
 
-export function prepareDataModel(file: TransactionFile): DataModel {
+export async function prepareDataModel(file: TransactionFile, effectiveCurrency: string, progressCallback: Function): Promise<DataModel> {
   const executedTransactions = file.transactions.sort((a, b) => a.time.getTime() - b.time.getTime());
+  const exchange = await fetchCurrencyExchangeRate(effectiveCurrency, executedTransactions, progressCallback);
   const moreWarnings = processSales(executedTransactions);
   file.warnings.push(...moreWarnings);
-  return { file, executedTransactions };
+  return { file, executedTransactions, exchange };
 }
 
 function processSales(transactions: Transaction[]) {

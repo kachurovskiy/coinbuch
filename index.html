@@ -14,6 +14,14 @@
     <a href="https://github.com/kachurovskiy/coinbuch/">Learn more on GitHub</a>
   </p>
   <p>
+    <label>
+      <input type="checkbox" id="calculateGainLoss" />
+      Calculate Gain/Loss in another currency
+    </label>
+    <label for="currencySelect">Currency:</label>
+    <select id="currencySelect"></select>
+  </p>
+  <p>
     Transactions CSV from <a href="https://accounts.coinbase.com/statements">accounts.coinbase.com/statements</a>: <input type="file" id="transactionInput" accept=".csv"/>
   </p>
   <div id="transactionOutput"></div>
