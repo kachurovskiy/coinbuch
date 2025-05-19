@@ -17,7 +17,7 @@ export class SectionYears {
     const years = transactions.map(t => t.time.getUTCFullYear());
     const uniqueYears = Array.from(new Set(years)).sort((a, b) => a - b);
     for (const year of uniqueYears) {
-      const yearTransactions = transactions.filter(t => t.time.getUTCFullYear() === year && t.gainOrLoss !== 0);
+      const yearTransactions = transactions.filter(t => t.time.getUTCFullYear() === year);
       result.appendChild(new SectionYear(this.model, year, yearTransactions).render());
     }
 

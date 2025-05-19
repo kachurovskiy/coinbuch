@@ -1,5 +1,5 @@
 import { needsCurrencyConversion, printCurrency } from "./currency";
-import { DataModel, Transaction } from "./interfaces";
+import { DataModel, Transaction, TransactionBuyTypes, TransactionSellTypes } from "./interfaces";
 import { isNumericHeader } from "./parser";
 
 export class SectionYear {
@@ -31,7 +31,7 @@ export class SectionYear {
     securityTable.appendChild(securityThead);
     const securityHeaderRow = document.createElement('tr');
     securityThead.appendChild(securityHeaderRow);
-    const securityHeaders = ['Security', 'Gain ' + printCurrency(this.firstTransaction.priceCurrency)];
+    const securityHeaders = ['Security', 'First buy', 'Last sell', 'Gain ' + printCurrency(this.firstTransaction.priceCurrency)];
     if (this.needsCurrencyConversion) {
       securityHeaders.push('Gain ' + printCurrency(this.model.exchange.targetCurrency));
     }
@@ -55,19 +55,49 @@ export class SectionYear {
       }
     }
 
+    const firstBuyMap = new Map<string, Date>();
+    const lastSellMap = new Map<string, Date>();
+    for (const transaction of this.transactions) {
+      const key = transaction.asset;
+      if (TransactionBuyTypes.includes(transaction.type)) {
+        const firstBuyDate = firstBuyMap.get(key);
+        if (!firstBuyDate || transaction.time.getTime() < firstBuyDate.getTime()) {
+          firstBuyMap.set(key, transaction.time);
+        }
+      } else if (TransactionSellTypes.includes(transaction.type)) {
+        const lastSellDate = lastSellMap.get(key);
+        if (!lastSellDate || transaction.time.getTime() > lastSellDate.getTime()) {
+          lastSellMap.set(key, transaction.time);
+        }
+      }
+    }
+
     for (const [security, gainLoss] of securityMap) {
       const row = document.createElement('tr');
       securityTable.appendChild(row);
+
       const securityCell = document.createElement('td');
       const securityLink = document.createElement('a');
       securityLink.innerText = security;
       securityLink.href = '#' + security;
       securityCell.appendChild(securityLink);
       row.appendChild(securityCell);
+
+      const firstBuyDate = firstBuyMap.get(security);
+      const firstBuyCell = document.createElement('td');
+      if (firstBuyDate) firstBuyCell.innerText = firstBuyDate.toISOString().split('T')[0];
+      row.appendChild(firstBuyCell);
+
+      const lastSellDate = lastSellMap.get(security);
+      const lastSellCell = document.createElement('td');
+      if (lastSellDate) lastSellCell.innerText = lastSellDate.toISOString().split('T')[0];
+      row.appendChild(lastSellCell);
+
       const gainLossCell = document.createElement('td');
       gainLossCell.innerText = gainLoss.toFixed(2);
       gainLossCell.classList.add(gainLoss > 0 ? 'positive' : 'negative');
       row.appendChild(gainLossCell);
+
       if (this.needsCurrencyConversion) {
         const gainLossInTargetCurrencyCell = document.createElement('td');
         const gainLossInTargetCurrency = securityMapInTargetCurrency.get(security) || 0;
@@ -91,6 +121,8 @@ export class SectionYear {
     const totalCell = document.createElement('td');
     totalCell.innerText = 'Total';
     totalRow.appendChild(totalCell);
+    totalRow.appendChild(document.createElement('td'));
+    totalRow.appendChild(document.createElement('td'));
     const totalGainLoss = document.createElement('td');
     const gainLossSum = this.transactions.reduce((total, t) => total + t.gainOrLoss, 0);
     totalGainLoss.innerText = gainLossSum.toFixed(2);
