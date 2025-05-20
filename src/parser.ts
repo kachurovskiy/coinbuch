@@ -1,3 +1,4 @@
+import { Money } from "./currency";
 import { Transaction, TransactionTypes, TransactionFile, TransactionType, TransactionSellTypes } from "./interfaces";
 
 function getRowError(t: Transaction, row: any): string {
@@ -10,29 +11,29 @@ function getRowError(t: Transaction, row: any): string {
   if (isNaN(t.quantity)) {
     return `Invalid quantity ${t.quantity} in row ${JSON.stringify(row)}`;
   }
-  if (isNaN(t.price) || t.price < 0) {
+  if (isNaN(t.price.amount) || t.price.amount < 0) {
     return `Invalid price ${t.price} in row ${JSON.stringify(row)}`;
   }
-  if (isNaN(t.fee) || t.fee < 0) {
+  if (isNaN(t.fee.amount) || t.fee.amount < 0) {
     return `Invalid fee ${t.fee} in row ${JSON.stringify(row)}`;
   }
-  if (isNaN(t.subtotal)) {
+  if (isNaN(t.subtotal.amount)) {
     return `Invalid subtotal ${t.subtotal} in row ${JSON.stringify(row)}`;
   }
-  if (isNaN(t.total)) {
+  if (isNaN(t.total.amount)) {
     return `Invalid total ${t.total} in row ${JSON.stringify(row)}`;
   }
   return '';
 }
 
 function getRowWarning(t: Transaction, row: any): string {
-  const expectedTotal = t.subtotal + t.fee * (TransactionSellTypes.includes(t.type) ? -1 : 1);
-  if (expectedTotal > 0 && Math.abs(1 - t.total / expectedTotal) > 0.001 && Math.abs(t.total - expectedTotal) > 1) {
+  const expectedTotal = t.subtotal.plus(t.fee.multiply(TransactionSellTypes.includes(t.type) ? -1 : 1));
+  if (expectedTotal.amount > 0 && Math.abs(1 - t.total.amount / expectedTotal.amount) > 0.001 && Math.abs(t.total.amount - expectedTotal.amount) > 1) {
     return `Invalid total ${t.total} - expected ${expectedTotal} in row ${JSON.stringify(row)}`;
   }
   // if shares is not 0 and price times shares is diferent from amount by 0.01, error
-  const subtotal = Math.abs(t.price * t.quantity);
-  if (t.quantity !== 0 && Math.abs(1 - subtotal / t.subtotal) > 0.002 && Math.abs(subtotal - t.subtotal) > 1) {
+  const subtotal = Math.abs(t.price.amount * t.quantity);
+  if (t.quantity !== 0 && Math.abs(1 - subtotal / t.subtotal.amount) > 0.002 && Math.abs(subtotal - t.subtotal.amount) > 1) {
     return `Invalid subtotal ${subtotal} - expected ${t.subtotal} in row ${JSON.stringify(row)}`;
   }
   return '';
@@ -76,6 +77,7 @@ export function parseTransactionFile(input: string): TransactionFile {
   // ID,Timestamp,Transaction Type,Asset,Quantity Transacted,Price Currency,Price at Transaction,
   // Subtotal,Total (inclusive of fees and/or spread),Fees and/or Spread,Notes
   for (const row of rows) {
+    const currency = row['Price Currency'];
     let transaction = {
       raw: row['raw'],
       id: row['ID'],
@@ -83,14 +85,15 @@ export function parseTransactionFile(input: string): TransactionFile {
       type: row['Transaction Type'] as TransactionType,
       asset: row['Asset'],
       quantity: parseCoinbaseNumber(row['Quantity Transacted']),
-      price: parseCoinbaseNumber(row['Price at Transaction']),
-      priceCurrency: row['Price Currency'],
-      subtotal: parseCoinbaseNumber(row['Subtotal']),
-      total: parseCoinbaseNumber(row['Total (inclusive of fees and/or spread)']),
-      fee: parseCoinbaseNumber(row['Fees and/or Spread']),
+      price: new Money(parseCoinbaseNumber(row['Price at Transaction']), currency),
+      priceCurrency: currency,
+      subtotal: new Money(parseCoinbaseNumber(row['Subtotal']), currency),
+      total: new Money(parseCoinbaseNumber(row['Total (inclusive of fees and/or spread)']), currency),
+      fee: new Money(parseCoinbaseNumber(row['Fees and/or Spread']), currency),
       notes: row['Notes'],
       quantitySold: 0,
-      gainOrLoss: 0,
+      gainOrLoss: new Money(0, currency),
+      lossInFeesIncluded: new Money(0, currency),
     };
     // Not informative to price USDC in USD, better show gain / loss in the other currency.
     if (transaction.asset === 'USDC' && transaction.priceCurrency === 'USD') {
@@ -113,11 +116,11 @@ export function convertTransactionCurrency(t: Transaction): Transaction {
   const match = t.notes.match(/(Bought|Sold) ([0-9.]+) USDC for ([0-9.]+) ([A-Z]+) on ([A-Z]+-[A-Z]+) at ([0-9.]+) ([A-Z]+\/USDC)/);
   if (!match) return t;
   const quantity = parseCoinbaseNumber(match[2]);
-  const price = parseCoinbaseNumber(match[6]);
   const priceCurrency = match[4];
-  const total = parseCoinbaseNumber(match[3]);
-  const fee = t.fee * price;
-  return { ...t, quantity, price, priceCurrency, fee, subtotal: total - fee, total };
+  const exchangeRate = parseCoinbaseNumber(match[6]);
+  const total = new Money(parseCoinbaseNumber(match[3]), priceCurrency);
+  const fee = new Money(t.fee.amount * exchangeRate, priceCurrency);
+  return { ...t, quantity, price: new Money(exchangeRate, priceCurrency), priceCurrency, fee, subtotal: total.minus(fee), total };
 }
 
 export function isNumericHeader(header: string): boolean {

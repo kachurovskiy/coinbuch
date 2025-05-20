@@ -1,4 +1,4 @@
-import { fetchCurrencyExchangeRate } from "./currency";
+import { fetchCurrencyExchangeRate, Money } from "./currency";
 import { DataModel, Transaction, TransactionFile, TransactionSellTypes, TransactionBuyTypes, Epsilon, TransactionPositiveTypes, TransactionNegativeTypes } from "./interfaces";
 
 export async function prepareDataModel(file: TransactionFile, effectiveCurrency: string, progressCallback: Function): Promise<DataModel> {
@@ -15,20 +15,23 @@ function processSales(transactions: Transaction[]) {
   for (const sale of sales) {
     const buys = transactions.filter(t => TransactionBuyTypes.includes(t.type) && t.asset === sale.asset && t.time < sale.time && Math.abs(t.quantitySold - t.quantity) > Epsilon);
     let remainingQuantity = sale.quantity;
-    let buyTotal = 0;
+    let buyTotal = new Money(0, sale.priceCurrency);
+    let buyFees = new Money(0, sale.priceCurrency);
     for (const buy of buys) {
       const quantityToSell = Math.min(buy.quantity - buy.quantitySold, remainingQuantity);
       buy.quantitySold += quantityToSell;
-      buyTotal += buy.total / buy.quantity * quantityToSell;
+      buyTotal = buyTotal.plus(buy.total.multiply(quantityToSell / buy.quantity));
+      buyFees = buyFees.plus(buy.fee.multiply(quantityToSell / buy.quantity));
       remainingQuantity -= quantityToSell;
       if (remainingQuantity === 0) {
         break;
       }
     }
-    if (sale.price * remainingQuantity > 0.05) {
-      warnings.push(`Unable to find the buy for ${remainingQuantity} ${sale.asset} in ${sale.raw} - gains can be overstated by ${sale.price * remainingQuantity}`);
+    if (sale.price.amount * remainingQuantity > 0.05) {
+      warnings.push(`Unable to find the buy for ${remainingQuantity} ${sale.asset} in ${sale.raw} - gains can be overstated by ${sale.price.multiply(remainingQuantity).toFixed(2)}`);
     }
-    sale.gainOrLoss = sale.total - buyTotal;
+    sale.gainOrLoss = sale.total.minus(buyTotal);
+    sale.lossInFeesIncluded = sale.fee.plus(buyFees);
   }
   return warnings;
 }

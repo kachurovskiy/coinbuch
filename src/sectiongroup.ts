@@ -1,4 +1,4 @@
-import { CurrencyExchangeAPI, needsCurrencyConversion, printCurrency } from "./currency";
+import { CurrencyExchangeAPI, Money, needsCurrencyConversion, printCurrency } from "./currency";
 import { Transaction, CashAsset, TransactionNegativeTypes, StableCoin } from "./interfaces";
 import { isNumericHeader } from "./parser";
 import { getRemainingQuantity } from "./processor";
@@ -14,7 +14,7 @@ export class SectionGroup {
 
     this.firstTransaction = transactions[0];
     this.priceCurrency = this.firstTransaction.priceCurrency;
-    this.needsCurrencyConversion = needsCurrencyConversion(this.firstTransaction, this.exchange.targetCurrency);
+    this.needsCurrencyConversion = needsCurrencyConversion(transactions, this.exchange.targetCurrency);
     this.headers = [
       'Time',
       'Type',
@@ -92,23 +92,28 @@ export class SectionGroup {
         transaction.quantity,
         transaction.price,
       ];
-      this.needsCurrencyConversion && cells.push(this.exchange.convertFromUSD(transaction.price, transaction.time));
+      this.needsCurrencyConversion && cells.push(transaction.price.convert(transaction.time, this.exchange));
       cells.push(transaction.fee);
-      this.needsCurrencyConversion && cells.push(this.exchange.convertFromUSD(transaction.fee, transaction.time));
-      const signedTotal = transaction.total * (TransactionNegativeTypes.includes(transaction.type) ? -1 : 1) * groupSign;
+      this.needsCurrencyConversion && cells.push(transaction.fee.convert(transaction.time, this.exchange));
+      const signedTotal = transaction.total.multiply(groupSign * (TransactionNegativeTypes.includes(transaction.type) ? -1 : 1));
       cells.push(signedTotal);
-      this.needsCurrencyConversion && cells.push(this.exchange.convertFromUSD(signedTotal, transaction.time));
+      this.needsCurrencyConversion && cells.push(signedTotal.convert(transaction.time, this.exchange));
       cells.push(transaction.gainOrLoss);
-      this.needsCurrencyConversion && cells.push(this.exchange.convertFromUSD(transaction.gainOrLoss, transaction.time));
+      this.needsCurrencyConversion && cells.push(transaction.gainOrLoss.convert(transaction.time, this.exchange));
       for (let i = 0; i < cells.length; i++) {
         const cell = cells[i];
         const td = document.createElement('td');
+        const header = this.headers[i];
         if (cell === 0) {
           td.innerText = '';
         } else if (typeof cell === 'number') {
-          td.innerText = cell.toFixed(this.headers[i].startsWith('Price') && Math.abs(cell) < 10000 ? 4 : 2);
+          td.innerText = cell.toFixed(header.startsWith('Price') && Math.abs(cell) < 10000 ? 4 : 2);
           td.classList.add('numeric');
-          if (this.headers[i].startsWith('Total') || this.headers[i].startsWith('Gain')) td.classList.add(cell > 0 ? 'positive' : 'negative');
+          if (header.startsWith('Total') || header.startsWith('Gain')) td.classList.add(cell > 0 ? 'positive' : 'negative');
+        } else if (cell instanceof Money) {
+          td.innerText = cell.toFixed(header.startsWith('Price') && Math.abs(cell.amount) < 10000 ? 4 : 2);
+          td.classList.add('numeric');
+          if (header.startsWith('Total') || header.startsWith('Gain')) td.classList.add(cell.amount > 0 ? 'positive' : 'negative');
         } else {
           td.innerText = String(cell);
         }
@@ -131,43 +136,45 @@ export class SectionGroup {
     totalRow.appendChild(document.createElement('td')); // Price
     this.needsCurrencyConversion && totalRow.appendChild(document.createElement('td')); // Price in target currency
 
-    const totalFeeSum = this.transactions.reduce((total, t) => total + t.fee, 0);
-    totalRow.appendChild(this.createNumericTd(totalFeeSum, 2, true)); // Fee
+    const totalFeeSum = this.transactions.reduce((total, t) => total.plus(t.fee), new Money(0, this.priceCurrency));
+    totalRow.appendChild(this.createMoneyTd(totalFeeSum)); // Fee
 
     if (this.needsCurrencyConversion) {
-      const totalFeeSumInTargetCurrency = this.transactions.reduce((total, t) => total + this.exchange.convertFromUSD(t.fee, t.time), 0);
-      totalRow.appendChild(this.createNumericTd(totalFeeSumInTargetCurrency, 2, true)); // Fee in target currency
+      const totalFeeSumInTargetCurrency = this.transactions.reduce((total, t) => total.plus(t.fee.convert(t.time, this.exchange)), new Money(0, this.exchange.targetCurrency));
+      totalRow.appendChild(this.createMoneyTd(totalFeeSumInTargetCurrency)); // Fee in target currency
     }
 
     const groupSign = CashAsset.includes(this.firstTransaction.asset) || StableCoin.includes(this.firstTransaction.asset) ? 1 : -1;
-    const totalAmountSum = this.transactions.reduce((total, t) => total + t.total * (TransactionNegativeTypes.includes(t.type) ? -1 : 1) * groupSign, 0);
-    totalRow.appendChild(this.createNumericTd(totalAmountSum, 2, true)); // Total Amount
+    const totalAmountSum = this.transactions.reduce((total, t) => total.plus(t.total.multiply((TransactionNegativeTypes.includes(t.type) ? -1 : 1) * groupSign)), new Money(0, this.priceCurrency));
+    totalRow.appendChild(this.createMoneyTd(totalAmountSum)); // Total Amount
 
     if (this.needsCurrencyConversion) {
-      const totalAmountSumInTargetCurrency = this.transactions.reduce((total, t) => total + this.exchange.convertFromUSD(t.total * (TransactionNegativeTypes.includes(t.type) ? -1 : 1), t.time) * groupSign, 0);
-      totalRow.appendChild(this.createNumericTd(totalAmountSumInTargetCurrency, 2, true)); // Total Amount in target currency
+      const totalAmountSumInTargetCurrency =
+        this.transactions.reduce(
+          (total, t) => total.plus(t.total.convert(t.time, this.exchange).multiply((TransactionNegativeTypes.includes(t.type) ? -1 : 1) * groupSign)), new Money(0, this.exchange.targetCurrency));
+      totalRow.appendChild(this.createMoneyTd(totalAmountSumInTargetCurrency)); // Total Amount in target currency
     }
 
-    const gainLossSum = this.transactions.reduce((total, t) => total + t.gainOrLoss, 0);
-    totalRow.appendChild(this.createNumericTd(gainLossSum, 2, true)); // Gain
+    const gainLossSum = this.transactions.reduce((total, t) => total.plus(t.gainOrLoss.convert(t.time, this.exchange, this.priceCurrency)), new Money(0, this.priceCurrency));
+    totalRow.appendChild(this.createMoneyTd(gainLossSum)); // Gain
 
     if (this.needsCurrencyConversion) {
-      const gainLossSumInTargetCurrency = this.transactions.reduce((total, t) => total + this.exchange.convertFromUSD(t.gainOrLoss, t.time), 0);
-      totalRow.appendChild(this.createNumericTd(gainLossSumInTargetCurrency, 2, true)); // Gain in target currency
+      const gainLossSumInTargetCurrency = this.transactions.reduce((total, t) => total.plus(t.gainOrLoss.convert(t.time, this.exchange)), new Money(0, this.exchange.targetCurrency));
+      totalRow.appendChild(this.createMoneyTd(gainLossSumInTargetCurrency)); // Gain in target currency
     }
   }
 
   private renderGainLossByYear(parentElement: HTMLElement): void {
-    const gainLossPerYear = new Map<number, number>();
-    const gainLossPerYearInTargetCurrency = new Map<number, number>();
+    const gainLossPerYear = new Map<number, Money>();
+    const gainLossPerYearInTargetCurrency = new Map<number, Money>();
     for (const transaction of this.transactions) {
-      if (transaction.gainOrLoss === 0) continue;
+      if (transaction.gainOrLoss.amount === 0) continue;
       const year = transaction.time.getUTCFullYear();
-      const gainLoss = gainLossPerYear.get(year) || 0;
-      gainLossPerYear.set(year, gainLoss + transaction.gainOrLoss);
+      const gainLoss = gainLossPerYear.get(year) || new Money(0, this.priceCurrency);
+      gainLossPerYear.set(year, gainLoss.plus(transaction.gainOrLoss));
       if (this.needsCurrencyConversion) {
-        const gainLossInTargetCurrency = gainLossPerYearInTargetCurrency.get(year) || 0;
-        gainLossPerYearInTargetCurrency.set(year, gainLossInTargetCurrency + this.exchange.convertFromUSD(transaction.gainOrLoss, transaction.time));
+        const gainLossInTargetCurrency = gainLossPerYearInTargetCurrency.get(year) || new Money(0, this.exchange.targetCurrency);
+        gainLossPerYearInTargetCurrency.set(year, gainLossInTargetCurrency.plus(transaction.gainOrLoss.convert(transaction.time, this.exchange)));
       }
     }
 
@@ -197,10 +204,10 @@ export class SectionGroup {
       const row = document.createElement('tr');
       gainTable.appendChild(row);
       row.appendChild(this.createTd(String(year)));
-      row.appendChild(this.createNumericTd(gainLoss, 2, true));
+      row.appendChild(this.createMoneyTd(gainLoss));
       if (this.needsCurrencyConversion) {
-        const gainLossInTargetCurrency = gainLossPerYearInTargetCurrency.get(year) || 0;
-        row.appendChild(this.createNumericTd(gainLossInTargetCurrency, 2, true));
+        const gainLossInTargetCurrency = gainLossPerYearInTargetCurrency.get(year) || new Money(0, this.exchange.targetCurrency);
+        row.appendChild(this.createMoneyTd(gainLossInTargetCurrency));
       }
     }
   }
@@ -211,7 +218,7 @@ export class SectionGroup {
     return td;
   }
 
-  private createNumericTd(value: number | undefined | null, toFixed: number, addSignClass: boolean): HTMLTableCellElement {
+  private createNumericTd(value: number, toFixed: number, addSignClass: boolean): HTMLTableCellElement {
     const td = document.createElement('td');
     if (value) {
       td.innerText = value.toFixed(toFixed);
@@ -220,6 +227,15 @@ export class SectionGroup {
         td.classList.add(value > 0 ? 'positive' : 'negative');
       }
     }
+    return td;
+  }
+
+  private createMoneyTd(value: Money): HTMLTableCellElement {
+    const td = document.createElement('td');
+    td.innerText = value.toString();
+    td.classList.add('numeric');
+    td.classList.add(value.amount > 0 ? 'positive' : 'negative');
+    debugger
     return td;
   }
 }

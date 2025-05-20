@@ -1,4 +1,4 @@
-import { CurrencyExchangeAPI } from "./currency";
+import { CurrencyExchangeAPI, Money } from "./currency";
 
 export interface TransactionFile {
   transactions: Transaction[];
@@ -55,18 +55,20 @@ export interface Transaction {
   readonly type: TransactionType;
   readonly asset: string;
   readonly quantity: number;
-  readonly price: number;
+  readonly price: Money;
   readonly priceCurrency: string;
-  readonly subtotal: number;
-  readonly total: number;
-  readonly fee: number;
+  readonly subtotal: Money;
+  readonly total: Money;
+  readonly fee: Money;
   readonly notes: string;
 
   // Only used for type === 'Buy'
   quantitySold: number;
 
   // Only used for type === 'Sell'
-  gainOrLoss: number;
+  gainOrLoss: Money;
+  // Only used for type === 'Sell'. These losses are already included in gainOrLoss.
+  lossInFeesIncluded: Money;
 }
 
 export interface DataModel {
