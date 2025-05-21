@@ -1,5 +1,5 @@
 import { CurrencyExchangeAPI, Money, needsCurrencyConversion, printCurrency } from "./currency";
-import { Transaction, CashAsset, TransactionNegativeTypes, StableCoin } from "./interfaces";
+import { Transaction, CashAsset, TransactionNegativeTypes, StableCoin, DataModel } from "./interfaces";
 import { isNumericHeader } from "./parser";
 import { getRemainingQuantity } from "./processor";
 
@@ -8,11 +8,13 @@ export class SectionGroup {
   private priceCurrency: string;
   private headers: string[];
   private needsCurrencyConversion = false;
+  private exchange: CurrencyExchangeAPI;
 
-  constructor(private groupKey: string, private transactions: Transaction[], private exchange: CurrencyExchangeAPI) {
+  constructor(private groupKey: string, private transactions: Transaction[], private model: DataModel) {
     if (transactions.length === 0) throw new Error('No transactions provided for ' + groupKey);
 
     this.firstTransaction = transactions[0];
+    this.exchange = this.model.exchange;
     this.priceCurrency = this.firstTransaction.priceCurrency;
     this.needsCurrencyConversion = needsCurrencyConversion(transactions, this.exchange.targetCurrency);
     this.headers = [
@@ -36,6 +38,13 @@ export class SectionGroup {
 
     if (this.transactions.length === 0) return result;
 
+    // Add a preamble viaible only in the print mode stating that this document was prepared by coinbuch on this date based on file this.model.name
+    const preamble = document.createElement('div');
+    preamble.className = 'print-section';
+    preamble.style.display = 'none';
+    preamble.innerHTML = `<h2>Excerpt from the Coinbase transaction analysis report</h2><p>This document was prepared by the <a href="https://github.com/kachurovskiy/coinbuch">coinbuch tool</a> on ${new Date().toISOString()} based on Coinbase transaction file ${this.model.name}</p>`;
+    result.appendChild(preamble);
+
     this.transactions.sort((a, b) => a.time.getTime() - b.time.getTime());
     result.dataset.sortKey = `${CashAsset.includes(this.firstTransaction.asset) || StableCoin.includes(this.firstTransaction.asset) ? 0 : 1}-${this.firstTransaction.asset}`;
 
@@ -45,6 +54,23 @@ export class SectionGroup {
     this.renderTableHeader(table);
     this.renderTableBody(table);
     this.renderTableFooter(table);
+
+    // Add raw transactions section, only visible in print mode
+    const rawSection = document.createElement('div');
+    rawSection.className = 'print-section';
+    rawSection.style.display = 'none';
+    rawSection.innerHTML = `<h3>Raw Transactions</h3><pre>${this.transactions.map(t => t.raw).join('\n')}</pre>`;
+    result.appendChild(rawSection);
+
+    // Add print-only CSS for .print-raw-section
+    const style = document.createElement('style');
+    style.innerHTML = `
+      @media print {
+        .print-section { display: block !important; }
+        pre { white-space: pre-wrap; word-wrap: break-word; }
+      }
+    `;
+    result.appendChild(style);
 
     return result;
   }
@@ -270,12 +296,12 @@ export class SectionGroup {
           row.appendChild(this.createMoneyTd(feeTarget));
         }
         // Total w/o Fees columns
-        const totalWithoutFees = total.minus(fee);
+        const totalWithoutFees = total.plus(fee);
         row.appendChild(this.createMoneyTd(totalWithoutFees));
         if (this.needsCurrencyConversion) {
           const totalInTarget = totalsPerYearInTargetCurrency.get(year) || new Money(0, this.exchange.targetCurrency);
           const feeTarget = feePerYearInTargetCurrency.get(year) || new Money(0, this.exchange.targetCurrency);
-          row.appendChild(this.createMoneyTd(totalInTarget.minus(feeTarget)));
+          row.appendChild(this.createMoneyTd(totalInTarget.plus(feeTarget)));
         }
         // Total columns
         row.appendChild(this.createMoneyTd(total));
@@ -317,12 +343,12 @@ export class SectionGroup {
           row.appendChild(this.createMoneyTd(feeTarget));
         }
         // Gain w/o Fees columns
-        const gainLossWithoutFees = gainLoss.minus(fee);
+        const gainLossWithoutFees = gainLoss.plus(fee);
         row.appendChild(this.createMoneyTd(gainLossWithoutFees));
         if (this.needsCurrencyConversion) {
           const gainLossInTargetCurrency = gainLossPerYearInTargetCurrency.get(year) || new Money(0, this.exchange.targetCurrency);
           const feeTarget = feePerYearInTargetCurrency.get(year) || new Money(0, this.exchange.targetCurrency);
-          row.appendChild(this.createMoneyTd(gainLossInTargetCurrency.minus(feeTarget)));
+          row.appendChild(this.createMoneyTd(gainLossInTargetCurrency.plus(feeTarget)));
         }
         // Gain columns
         row.appendChild(this.createMoneyTd(gainLoss));

@@ -11,7 +11,7 @@ export class SectionGroups {
     const groups = groupTransactions(this.model.executedTransactions);
     const groupChildren: HTMLElement[] = [];
     for (const [groupKey, group] of groups) {
-      groupChildren.push(new SectionGroup(groupKey, group, this.model.exchange).renderGroup());
+      groupChildren.push(new SectionGroup(groupKey, group, this.model).renderGroup());
     }
     groupChildren.sort((a, b) => a.dataset.sortKey!.localeCompare(b.dataset.sortKey!));
     div.replaceChildren(... groupChildren);

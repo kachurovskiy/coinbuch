@@ -28,7 +28,7 @@ function readFile() {
   const reader = new FileReader();
   reader.onload = async () => {
     try {
-      await renderTransactionFile(parseTransactionFile(reader.result as string));
+      await renderTransactionFile(file.name, parseTransactionFile(reader.result as string));
     } catch (e) {
       alert(`Error parsing file: ${e}`);
     }
@@ -40,8 +40,8 @@ function readFile() {
 }
 readFile();
 
-async function renderTransactionFile(file: TransactionFile) {
-  const model = await prepareDataModel(file, getEffectiveCurrency(), (progress: string) => {
+async function renderTransactionFile(name: string, file: TransactionFile) {
+  const model = await prepareDataModel(name, file, getEffectiveCurrency(), (progress: string) => {
     outputElement.innerText = progress;
   });
   outputElement.replaceChildren(

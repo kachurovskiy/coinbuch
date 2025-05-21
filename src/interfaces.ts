@@ -70,6 +70,7 @@ export interface Transaction {
 }
 
 export interface DataModel {
+  name: string;
   file: TransactionFile;
   executedTransactions: Transaction[];
   exchange: CurrencyExchangeAPI;
