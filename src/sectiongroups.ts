@@ -33,6 +33,7 @@ function groupTransactions(transactions: Transaction[]): Map<string, Transaction
 function getGroupKey(t: Transaction): string {
   if (t.type === 'Deposit' || t.type === 'Withdrawal') return 'Deposit / Withdrawal';
   if (t.type === 'Reward Income') return t.type;
+  if (t.type.startsWith('Subscription Rebate')) return 'Subscription Rebate';
   if (StableCoin.includes(t.asset) && (TransactionBuyTypes.includes(t.type) || TransactionSellTypes.includes(t.type))) return `${t.asset} Trading`;
   if (!CashAsset.includes(t.asset)) return t.asset;
   return t.type;

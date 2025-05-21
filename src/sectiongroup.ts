@@ -178,36 +178,74 @@ export class SectionGroup {
       }
     }
 
-    if (gainLossPerYear.size === 0) return;
+    // If all gains are zero, show totals instead
+    const showTotals = gainLossPerYear.size === 0;
 
     parentElement.appendChild(document.createElement('br'));
-    const gainTable = document.createElement('table');
-    parentElement.appendChild(gainTable);
+    const table = document.createElement('table');
+    parentElement.appendChild(table);
 
-    const gainThead = document.createElement('thead');
-    const gainHeaderRow = document.createElement('tr');
-    gainThead.appendChild(gainHeaderRow);
-    gainTable.appendChild(gainThead);
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
 
-    const gainHeaders = ['Year', `Gain ${printCurrency(this.priceCurrency)}`];
-    if (this.needsCurrencyConversion) {
-      gainHeaders.push(`Gain ${printCurrency(this.exchange.targetCurrency)}`);
-    }
-    for (const header of gainHeaders) {
-      const th = document.createElement('th');
-      th.innerText = header;
-      if (isNumericHeader(header)) th.classList.add('numeric');
-      gainHeaderRow.appendChild(th);
-    }
-
-    for (const [year, gainLoss] of gainLossPerYear) {
-      const row = document.createElement('tr');
-      gainTable.appendChild(row);
-      row.appendChild(this.createTd(String(year)));
-      row.appendChild(this.createMoneyTd(gainLoss));
+    if (showTotals) {
+      const headers = ['Year', `Total ${printCurrency(this.priceCurrency)}`];
       if (this.needsCurrencyConversion) {
-        const gainLossInTargetCurrency = gainLossPerYearInTargetCurrency.get(year) || new Money(0, this.exchange.targetCurrency);
-        row.appendChild(this.createMoneyTd(gainLossInTargetCurrency));
+        headers.push(`Total ${printCurrency(this.exchange.targetCurrency)}`);
+      }
+      for (const header of headers) {
+        const th = document.createElement('th');
+        th.innerText = header;
+        if (isNumericHeader(header)) th.classList.add('numeric');
+        headerRow.appendChild(th);
+      }
+
+      // Calculate totals per year
+      const totalsPerYear = new Map<number, Money>();
+      const totalsPerYearInTargetCurrency = new Map<number, Money>();
+      for (const transaction of this.transactions) {
+        const year = transaction.time.getUTCFullYear();
+        const prev = totalsPerYear.get(year) || new Money(0, this.priceCurrency);
+        totalsPerYear.set(year, prev.plus(transaction.total));
+        if (this.needsCurrencyConversion) {
+          const prevTarget = totalsPerYearInTargetCurrency.get(year) || new Money(0, this.exchange.targetCurrency);
+          totalsPerYearInTargetCurrency.set(year, prevTarget.plus(transaction.total.convert(transaction.time, this.exchange)));
+        }
+      }
+
+      for (const [year, total] of totalsPerYear) {
+        const row = document.createElement('tr');
+        table.appendChild(row);
+        row.appendChild(this.createTd(String(year)));
+        row.appendChild(this.createMoneyTd(total));
+        if (this.needsCurrencyConversion) {
+          const totalInTarget = totalsPerYearInTargetCurrency.get(year) || new Money(0, this.exchange.targetCurrency);
+          row.appendChild(this.createMoneyTd(totalInTarget));
+        }
+      }
+    } else {
+      const gainHeaders = ['Year', `Gain ${printCurrency(this.priceCurrency)}`];
+      if (this.needsCurrencyConversion) {
+        gainHeaders.push(`Gain ${printCurrency(this.exchange.targetCurrency)}`);
+      }
+      for (const header of gainHeaders) {
+        const th = document.createElement('th');
+        th.innerText = header;
+        if (isNumericHeader(header)) th.classList.add('numeric');
+        headerRow.appendChild(th);
+      }
+
+      for (const [year, gainLoss] of gainLossPerYear) {
+        const row = document.createElement('tr');
+        table.appendChild(row);
+        row.appendChild(this.createTd(String(year)));
+        row.appendChild(this.createMoneyTd(gainLoss));
+        if (this.needsCurrencyConversion) {
+          const gainLossInTargetCurrency = gainLossPerYearInTargetCurrency.get(year) || new Money(0, this.exchange.targetCurrency);
+          row.appendChild(this.createMoneyTd(gainLossInTargetCurrency));
+        }
       }
     }
   }
