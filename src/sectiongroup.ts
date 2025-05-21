@@ -40,11 +40,11 @@ export class SectionGroup {
     result.dataset.sortKey = `${CashAsset.includes(this.firstTransaction.asset) || StableCoin.includes(this.firstTransaction.asset) ? 0 : 1}-${this.firstTransaction.asset}`;
 
     this.renderGroupHeader(result);
+    this.renderGainLossByYear(result);
     const table = this.createTableStructure(result);
     this.renderTableHeader(table);
     this.renderTableBody(table);
     this.renderTableFooter(table);
-    this.renderGainLossByYear(result);
 
     return result;
   }
@@ -54,6 +54,29 @@ export class SectionGroup {
     titleElement.innerText = this.groupKey;
     titleElement.id = this.firstTransaction.asset;
     parentElement.appendChild(titleElement);
+
+    const printBtn = document.createElement('button');
+    printBtn.innerText = 'Print';
+    printBtn.className = 'print-button';
+    printBtn.style.marginLeft = '1em';
+    printBtn.onclick = () => {
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write('<html><head><title>' + this.groupKey + '</title>');
+        Array.from(document.querySelectorAll('link[rel="stylesheet"],style')).forEach(styleNode => {
+          printWindow.document.write(styleNode.outerHTML);
+        });
+        printWindow.document.write('</head><body>');
+        printWindow.document.write(parentElement.outerHTML);
+        printWindow.document.write('</body></html>');
+        printWindow.document.close();
+        printWindow.focus();
+        setTimeout(() => {
+          printWindow.print();
+        }, 300);
+      }
+    };
+    titleElement.appendChild(printBtn);
   }
 
   private createTableStructure(parentElement: HTMLElement): HTMLTableElement {
@@ -192,9 +215,9 @@ export class SectionGroup {
     // If all gains are zero, show totals instead
     const showTotals = gainLossPerYear.size === 0;
 
-    parentElement.appendChild(document.createElement('br'));
     const table = document.createElement('table');
     parentElement.appendChild(table);
+    parentElement.appendChild(document.createElement('br'));
 
     const thead = document.createElement('thead');
     const headerRow = document.createElement('tr');

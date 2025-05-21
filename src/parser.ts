@@ -95,7 +95,7 @@ export function parseTransactionFile(input: string): TransactionFile {
       gainOrLoss: new Money(0, currency),
     };
     // Not informative to price USDC in USD, better show gain / loss in the other currency.
-    if (transaction.asset === 'USDC' && transaction.priceCurrency === 'USD') {
+    if (transaction.asset === 'USDC' && currency === 'USD') {
       transaction = convertTransactionCurrency(transaction);
     }
     const error = getRowError(transaction, row);
@@ -119,7 +119,7 @@ export function convertTransactionCurrency(t: Transaction): Transaction {
   const exchangeRate = parseCoinbaseNumber(match[6]);
   const total = new Money(parseCoinbaseNumber(match[3]), priceCurrency);
   const fee = new Money(t.fee.amount * exchangeRate, priceCurrency);
-  return { ...t, quantity, price: new Money(exchangeRate, priceCurrency), priceCurrency, fee, subtotal: total.minus(fee), total };
+  return { ...t, quantity, price: new Money(exchangeRate, priceCurrency), priceCurrency, fee, subtotal: total.minus(fee), total, gainOrLoss: new Money(0, priceCurrency) };
 }
 
 export function isNumericHeader(header: string): boolean {

@@ -28,6 +28,10 @@ table {
   width: 100%;
 }
 
+.transactionGroup {
+  margin: 20px 0;
+}
+
 th,
 td {
   padding: 5px;
@@ -58,4 +62,10 @@ th {
 .negative {
   color: red;
   text-align: right;
+}
+
+@media print {
+  .print-button {
+    display: none;
+  }
 }
