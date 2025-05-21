@@ -167,14 +167,25 @@ export class SectionGroup {
   private renderGainLossByYear(parentElement: HTMLElement): void {
     const gainLossPerYear = new Map<number, Money>();
     const gainLossPerYearInTargetCurrency = new Map<number, Money>();
+    const feePerYear = new Map<number, Money>();
+    const feePerYearInTargetCurrency = new Map<number, Money>();
     for (const transaction of this.transactions) {
-      if (transaction.gainOrLoss.amount === 0) continue;
+      if (transaction.gainOrLoss.amount !== 0) {
+        const year = transaction.time.getUTCFullYear();
+        const gainLoss = gainLossPerYear.get(year) || new Money(0, this.priceCurrency);
+        gainLossPerYear.set(year, gainLoss.plus(transaction.gainOrLoss));
+        if (this.needsCurrencyConversion) {
+          const gainLossInTargetCurrency = gainLossPerYearInTargetCurrency.get(year) || new Money(0, this.exchange.targetCurrency);
+          gainLossPerYearInTargetCurrency.set(year, gainLossInTargetCurrency.plus(transaction.gainOrLoss.convert(transaction.time, this.exchange)));
+        }
+      }
+      // Always accumulate fees per year
       const year = transaction.time.getUTCFullYear();
-      const gainLoss = gainLossPerYear.get(year) || new Money(0, this.priceCurrency);
-      gainLossPerYear.set(year, gainLoss.plus(transaction.gainOrLoss));
+      const fee = feePerYear.get(year) || new Money(0, this.priceCurrency);
+      feePerYear.set(year, fee.plus(transaction.fee));
       if (this.needsCurrencyConversion) {
-        const gainLossInTargetCurrency = gainLossPerYearInTargetCurrency.get(year) || new Money(0, this.exchange.targetCurrency);
-        gainLossPerYearInTargetCurrency.set(year, gainLossInTargetCurrency.plus(transaction.gainOrLoss.convert(transaction.time, this.exchange)));
+        const feeTarget = feePerYearInTargetCurrency.get(year) || new Money(0, this.exchange.targetCurrency);
+        feePerYearInTargetCurrency.set(year, feeTarget.plus(transaction.fee.convert(transaction.time, this.exchange)));
       }
     }
 
@@ -191,7 +202,12 @@ export class SectionGroup {
     table.appendChild(thead);
 
     if (showTotals) {
-      const headers = ['Year', `Total ${printCurrency(this.priceCurrency)}`];
+      const headers = ['Year'];
+      headers.push(`Fee ${printCurrency(this.priceCurrency)}`);
+      if (this.needsCurrencyConversion) {
+        headers.push(`Fee ${printCurrency(this.exchange.targetCurrency)}`);
+      }
+      headers.push(`Total ${printCurrency(this.priceCurrency)}`);
       if (this.needsCurrencyConversion) {
         headers.push(`Total ${printCurrency(this.exchange.targetCurrency)}`);
       }
@@ -219,6 +235,10 @@ export class SectionGroup {
         const row = document.createElement('tr');
         table.appendChild(row);
         row.appendChild(this.createTd(String(year)));
+        row.appendChild(this.createMoneyTd(feePerYear.get(year) || new Money(0, this.priceCurrency)));
+        if (this.needsCurrencyConversion) {
+          row.appendChild(this.createMoneyTd(feePerYearInTargetCurrency.get(year) || new Money(0, this.exchange.targetCurrency)));
+        }
         row.appendChild(this.createMoneyTd(total));
         if (this.needsCurrencyConversion) {
           const totalInTarget = totalsPerYearInTargetCurrency.get(year) || new Money(0, this.exchange.targetCurrency);
@@ -226,7 +246,12 @@ export class SectionGroup {
         }
       }
     } else {
-      const gainHeaders = ['Year', `Gain ${printCurrency(this.priceCurrency)}`];
+      const gainHeaders = ['Year'];
+      gainHeaders.push(`Fee ${printCurrency(this.priceCurrency)}`);
+      if (this.needsCurrencyConversion) {
+        gainHeaders.push(`Fee ${printCurrency(this.exchange.targetCurrency)}`);
+      }
+      gainHeaders.push(`Gain ${printCurrency(this.priceCurrency)}`);
       if (this.needsCurrencyConversion) {
         gainHeaders.push(`Gain ${printCurrency(this.exchange.targetCurrency)}`);
       }
@@ -241,6 +266,10 @@ export class SectionGroup {
         const row = document.createElement('tr');
         table.appendChild(row);
         row.appendChild(this.createTd(String(year)));
+        row.appendChild(this.createMoneyTd(feePerYear.get(year) || new Money(0, this.priceCurrency)));
+        if (this.needsCurrencyConversion) {
+          row.appendChild(this.createMoneyTd(feePerYearInTargetCurrency.get(year) || new Money(0, this.exchange.targetCurrency)));
+        }
         row.appendChild(this.createMoneyTd(gainLoss));
         if (this.needsCurrencyConversion) {
           const gainLossInTargetCurrency = gainLossPerYearInTargetCurrency.get(year) || new Money(0, this.exchange.targetCurrency);
