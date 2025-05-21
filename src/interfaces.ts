@@ -67,8 +67,6 @@ export interface Transaction {
 
   // Only used for type === 'Sell'
   gainOrLoss: Money;
-  // Only used for type === 'Sell'. These losses are already included in gainOrLoss.
-  lossInFeesIncluded: Money;
 }
 
 export interface DataModel {

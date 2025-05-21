@@ -93,7 +93,6 @@ export function parseTransactionFile(input: string): TransactionFile {
       notes: row['Notes'],
       quantitySold: 0,
       gainOrLoss: new Money(0, currency),
-      lossInFeesIncluded: new Money(0, currency),
     };
     // Not informative to price USDC in USD, better show gain / loss in the other currency.
     if (transaction.asset === 'USDC' && transaction.priceCurrency === 'USD') {

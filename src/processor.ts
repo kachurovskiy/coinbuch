@@ -31,7 +31,6 @@ function processSales(transactions: Transaction[]) {
       warnings.push(`Unable to find the buy for ${remainingQuantity} ${sale.asset} in ${sale.raw} - gains can be overstated by ${sale.price.multiply(remainingQuantity).toFixed(2)}`);
     }
     sale.gainOrLoss = sale.total.minus(buyTotal);
-    sale.lossInFeesIncluded = sale.fee.plus(buyFees);
   }
   return warnings;
 }
