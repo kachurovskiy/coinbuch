@@ -1,5 +1,5 @@
 import { CurrencyExchangeAPI, Money, needsCurrencyConversion, printCurrency } from "./currency";
-import { Transaction, CashAsset, TransactionNegativeTypes, StableCoin, DataModel } from "./interfaces";
+import { Transaction, CashAsset, TransactionNegativeTypes, StableCoin, DataModel, TransactionSellTypes, TransactionBuyTypes } from "./interfaces";
 import { isNumericHeader } from "./parser";
 import { getRemainingQuantity } from "./processor";
 
@@ -148,7 +148,18 @@ export class SectionGroup {
       cells.push(signedTotal);
       this.needsCurrencyConversion && cells.push(signedTotal.convert(transaction.time, this.exchange));
       cells.push(transaction.gainOrLoss);
-      this.needsCurrencyConversion && cells.push(transaction.gainOrLoss.convert(transaction.time, this.exchange));
+      if (this.needsCurrencyConversion) {
+        if (TransactionSellTypes.includes(transaction.type)) {
+          let costBasisTarget = new Money(0, this.exchange.targetCurrency);
+          for (const buy of transaction.buyTransactions) {
+            const cb = buy.transaction.total.multiply(buy.quantity / buy.transaction.quantity);
+            costBasisTarget = costBasisTarget.plus(cb.convert(buy.transaction.time, this.model.exchange));
+          }
+          cells.push(transaction.total.convert(transaction.time, this.exchange).minus(costBasisTarget));
+        } else {
+          cells.push(new Money(0, this.exchange.targetCurrency));
+        }
+      }
       for (let i = 0; i < cells.length; i++) {
         const cell = cells[i];
         const td = document.createElement('td');
@@ -208,38 +219,68 @@ export class SectionGroup {
     totalRow.appendChild(this.createMoneyTd(gainLossSum)); // Gain
 
     if (this.needsCurrencyConversion) {
-      const gainLossSumInTargetCurrency = this.transactions.reduce((total, t) => total.plus(t.gainOrLoss.convert(t.time, this.exchange)), new Money(0, this.exchange.targetCurrency));
-      totalRow.appendChild(this.createMoneyTd(gainLossSumInTargetCurrency)); // Gain in target currency
+      // gainOrLoss can not be converted, we need to calculate it by converting total and cost basis.
+      const costBasisInTarget = this.transactions.reduce((total, t) => {
+        let cb = new Money(0, this.exchange.targetCurrency);
+        for (const buy of t.buyTransactions) {
+          const cbAmount = buy.transaction.total.multiply(buy.quantity / buy.transaction.quantity);
+          cb = cb.plus(cbAmount.convert(buy.transaction.time, this.model.exchange));
+        }
+        return total.plus(cb);
+      }, new Money(0, this.exchange.targetCurrency));
+      const proceedsInTarget = this.transactions.filter(t => TransactionSellTypes.includes(t.type)).reduce((total, t) => total.plus(t.total.convert(t.time, this.exchange)), new Money(0, this.exchange.targetCurrency));
+      const gainLossSumInTargetCurrency = proceedsInTarget.minus(costBasisInTarget);
+      totalRow.appendChild(this.createMoneyTd(gainLossSumInTargetCurrency));
     }
   }
 
   private renderGainLossByYear(parentElement: HTMLElement): void {
-    const gainLossPerYear = new Map<number, Money>();
-    const gainLossPerYearInTargetCurrency = new Map<number, Money>();
-    const feePerYear = new Map<number, Money>();
-    const feePerYearInTargetCurrency = new Map<number, Money>();
+    const costBasisMap = new Map<number, Money>();
+    const costBasisMapTarget = new Map<number, Money>();
+    const proceedsMap = new Map<number, Money>();
+    const proceedsMapTarget = new Map<number, Money>();
+
     for (const transaction of this.transactions) {
-      if (transaction.gainOrLoss.amount !== 0) {
-        const year = transaction.time.getUTCFullYear();
-        const gainLoss = gainLossPerYear.get(year) || new Money(0, this.priceCurrency);
-        gainLossPerYear.set(year, gainLoss.plus(transaction.gainOrLoss));
-        if (this.needsCurrencyConversion) {
-          const gainLossInTargetCurrency = gainLossPerYearInTargetCurrency.get(year) || new Money(0, this.exchange.targetCurrency);
-          gainLossPerYearInTargetCurrency.set(year, gainLossInTargetCurrency.plus(transaction.gainOrLoss.convert(transaction.time, this.exchange)));
-        }
+      if (!TransactionSellTypes.includes(transaction.type)) continue;
+      const key = transaction.time.getUTCFullYear();
+
+      let costBasis = costBasisMap.get(key) || new Money(0, transaction.priceCurrency);
+      let costBasisTarget = costBasisMapTarget.get(key) || new Money(0, this.model.exchange.targetCurrency);
+      for (const buy of transaction.buyTransactions) {
+        const cb = buy.transaction.total.multiply(buy.quantity / buy.transaction.quantity);
+        costBasis = costBasis.plus(cb);
+        costBasisTarget = costBasisTarget.plus(cb.convert(buy.transaction.time, this.model.exchange));
       }
-      // Always accumulate fees per year
-      const year = transaction.time.getUTCFullYear();
-      const fee = feePerYear.get(year) || new Money(0, this.priceCurrency);
-      feePerYear.set(year, fee.plus(transaction.fee));
-      if (this.needsCurrencyConversion) {
-        const feeTarget = feePerYearInTargetCurrency.get(year) || new Money(0, this.exchange.targetCurrency);
-        feePerYearInTargetCurrency.set(year, feeTarget.plus(transaction.fee.convert(transaction.time, this.exchange)));
+      costBasisMap.set(key, costBasis);
+      costBasisMapTarget.set(key, costBasisTarget);
+
+      let proceeds = proceedsMap.get(key) || new Money(0, transaction.priceCurrency);
+      let proceedsTarget = proceedsMapTarget.get(key) || new Money(0, this.model.exchange.targetCurrency);
+      proceeds = proceeds.plus(transaction.total.convert(transaction.time, this.model.exchange, proceeds.currency));
+      proceedsTarget = proceedsTarget.plus(transaction.total.convert(transaction.time, this.model.exchange));
+      proceedsMap.set(key, proceeds);
+      proceedsMapTarget.set(key, proceedsTarget);
+    }
+
+    const firstBuyMap = new Map<number, Date>();
+    const lastSellMap = new Map<number, Date>();
+    for (const transaction of this.transactions) {
+      const key = transaction.time.getUTCFullYear();
+      if (TransactionBuyTypes.includes(transaction.type)) {
+        const firstBuyDate = firstBuyMap.get(key);
+        if (!firstBuyDate || transaction.time.getTime() < firstBuyDate.getTime()) {
+          firstBuyMap.set(key, transaction.time);
+        }
+      } else if (TransactionSellTypes.includes(transaction.type)) {
+        const lastSellDate = lastSellMap.get(key);
+        if (!lastSellDate || transaction.time.getTime() > lastSellDate.getTime()) {
+          lastSellMap.set(key, transaction.time);
+        }
       }
     }
 
     // If all gains are zero, show totals instead
-    const showTotals = gainLossPerYear.size === 0;
+    const showTotals = proceedsMap.size === 0;
 
     const table = document.createElement('table');
     parentElement.appendChild(table);
@@ -252,14 +293,6 @@ export class SectionGroup {
 
     if (showTotals) {
       const headers = ['Year'];
-      headers.push(`Fee ${printCurrency(this.priceCurrency)}`);
-      if (this.needsCurrencyConversion) {
-        headers.push(`Fee ${printCurrency(this.exchange.targetCurrency)}`);
-      }
-      headers.push(`Total w/o Fees ${printCurrency(this.priceCurrency)}`);
-      if (this.needsCurrencyConversion) {
-        headers.push(`Total w/o Fees ${printCurrency(this.exchange.targetCurrency)}`);
-      }
       headers.push(`Total ${printCurrency(this.priceCurrency)}`);
       if (this.needsCurrencyConversion) {
         headers.push(`Total ${printCurrency(this.exchange.targetCurrency)}`);
@@ -288,21 +321,6 @@ export class SectionGroup {
         const row = document.createElement('tr');
         table.appendChild(row);
         row.appendChild(this.createTd(String(year)));
-        // Fee columns
-        const fee = feePerYear.get(year) || new Money(0, this.priceCurrency);
-        row.appendChild(this.createMoneyTd(fee));
-        if (this.needsCurrencyConversion) {
-          const feeTarget = feePerYearInTargetCurrency.get(year) || new Money(0, this.exchange.targetCurrency);
-          row.appendChild(this.createMoneyTd(feeTarget));
-        }
-        // Total w/o Fees columns
-        const totalWithoutFees = total.plus(fee);
-        row.appendChild(this.createMoneyTd(totalWithoutFees));
-        if (this.needsCurrencyConversion) {
-          const totalInTarget = totalsPerYearInTargetCurrency.get(year) || new Money(0, this.exchange.targetCurrency);
-          const feeTarget = feePerYearInTargetCurrency.get(year) || new Money(0, this.exchange.targetCurrency);
-          row.appendChild(this.createMoneyTd(totalInTarget.plus(feeTarget)));
-        }
         // Total columns
         row.appendChild(this.createMoneyTd(total));
         if (this.needsCurrencyConversion) {
@@ -311,14 +329,14 @@ export class SectionGroup {
         }
       }
     } else {
-      const gainHeaders = ['Year'];
-      gainHeaders.push(`Fee ${printCurrency(this.priceCurrency)}`);
+      const gainHeaders = ['Year', 'First Buy', 'Last Sell'];
+      gainHeaders.push(`Cost Basis ${printCurrency(this.priceCurrency)}`);
       if (this.needsCurrencyConversion) {
-        gainHeaders.push(`Fee ${printCurrency(this.exchange.targetCurrency)}`);
+        gainHeaders.push(`Cost Basis ${printCurrency(this.exchange.targetCurrency)}`);
       }
-      gainHeaders.push(`Gain w/o Fees ${printCurrency(this.priceCurrency)}`);
+      gainHeaders.push(`Proceeds ${printCurrency(this.priceCurrency)}`);
       if (this.needsCurrencyConversion) {
-        gainHeaders.push(`Gain w/o Fees ${printCurrency(this.exchange.targetCurrency)}`);
+        gainHeaders.push(`Proceeds ${printCurrency(this.exchange.targetCurrency)}`);
       }
       gainHeaders.push(`Gain ${printCurrency(this.priceCurrency)}`);
       if (this.needsCurrencyConversion) {
@@ -331,30 +349,43 @@ export class SectionGroup {
         headerRow.appendChild(th);
       }
 
-      for (const [year, gainLoss] of gainLossPerYear) {
+      for (const [year] of proceedsMap) {
         const row = document.createElement('tr');
         table.appendChild(row);
         row.appendChild(this.createTd(String(year)));
-        // Fee columns
-        const fee = feePerYear.get(year) || new Money(0, this.priceCurrency);
-        row.appendChild(this.createMoneyTd(fee));
-        if (this.needsCurrencyConversion) {
-          const feeTarget = feePerYearInTargetCurrency.get(year) || new Money(0, this.exchange.targetCurrency);
-          row.appendChild(this.createMoneyTd(feeTarget));
+
+        const firstBuyDate = firstBuyMap.get(year);
+        const lastSellDate = lastSellMap.get(year);
+        if (firstBuyDate) {
+          row.appendChild(this.createTd(firstBuyDate.toISOString().split('T')[0]));
+        } else {
+          row.appendChild(this.createTd(''));
         }
-        // Gain w/o Fees columns
-        const gainLossWithoutFees = gainLoss.plus(fee);
-        row.appendChild(this.createMoneyTd(gainLossWithoutFees));
-        if (this.needsCurrencyConversion) {
-          const gainLossInTargetCurrency = gainLossPerYearInTargetCurrency.get(year) || new Money(0, this.exchange.targetCurrency);
-          const feeTarget = feePerYearInTargetCurrency.get(year) || new Money(0, this.exchange.targetCurrency);
-          row.appendChild(this.createMoneyTd(gainLossInTargetCurrency.plus(feeTarget)));
+        if (lastSellDate) {
+          row.appendChild(this.createTd(lastSellDate.toISOString().split('T')[0]));
+        } else {
+          row.appendChild(this.createTd(''));
         }
-        // Gain columns
-        row.appendChild(this.createMoneyTd(gainLoss));
+
+        const costBasis = costBasisMap.get(year) || new Money(0, this.priceCurrency);
+        row.appendChild(this.createMoneyTd(costBasis));
+        const costBasisInTarget = costBasisMapTarget.get(year) || new Money(0, this.exchange.targetCurrency);
         if (this.needsCurrencyConversion) {
-          const gainLossInTargetCurrency = gainLossPerYearInTargetCurrency.get(year) || new Money(0, this.exchange.targetCurrency);
-          row.appendChild(this.createMoneyTd(gainLossInTargetCurrency));
+          row.appendChild(this.createMoneyTd(costBasisInTarget));
+        }
+
+        const proceeds = proceedsMap.get(year) || new Money(0, this.priceCurrency);
+        row.appendChild(this.createMoneyTd(proceeds));
+        const proceedsInTarget = proceedsMapTarget.get(year) || new Money(0, this.exchange.targetCurrency);
+        if (this.needsCurrencyConversion) {
+          row.appendChild(this.createMoneyTd(proceedsInTarget));
+        }
+
+        const gain = proceeds.minus(costBasis);
+        row.appendChild(this.createMoneyTd(gain));
+        if (this.needsCurrencyConversion) {
+          const gainInTarget = proceedsInTarget.minus(costBasisInTarget);
+          row.appendChild(this.createMoneyTd(gainInTarget));
         }
       }
     }
