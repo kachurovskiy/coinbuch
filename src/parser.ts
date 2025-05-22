@@ -78,7 +78,7 @@ export function parseTransactionFile(input: string): TransactionFile {
   // Subtotal,Total (inclusive of fees and/or spread),Fees and/or Spread,Notes
   for (const row of rows) {
     const currency = row['Price Currency'];
-    let transaction = {
+    let transaction: Transaction = {
       raw: row['raw'],
       id: row['ID'],
       time: parseTime(row['Timestamp']),
@@ -93,6 +93,7 @@ export function parseTransactionFile(input: string): TransactionFile {
       notes: row['Notes'],
       quantitySold: 0,
       gainOrLoss: new Money(0, currency),
+      buyTransactions: [],
     };
     // Not informative to price USDC in USD, better show gain / loss in the other currency.
     if (transaction.asset === 'USDC' && currency === 'USD') {

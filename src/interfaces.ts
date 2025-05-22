@@ -67,6 +67,14 @@ export interface Transaction {
 
   // Only used for type === 'Sell'
   gainOrLoss: Money;
+
+  // Only used for type === 'Sell': transactions where the quantity was bought.
+  buyTransactions: PartialTransaction[];
+}
+
+export interface PartialTransaction {
+  quantity: number;
+  transaction: Transaction;
 }
 
 export interface DataModel {

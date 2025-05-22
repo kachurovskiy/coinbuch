@@ -20,6 +20,7 @@ function processSales(transactions: Transaction[]) {
     for (const buy of buys) {
       const quantityToSell = Math.min(buy.quantity - buy.quantitySold, remainingQuantity);
       buy.quantitySold += quantityToSell;
+      sale.buyTransactions.push({ quantity: quantityToSell, transaction: buy });
       buyTotal = buyTotal.plus(buy.total.multiply(quantityToSell / buy.quantity));
       buyFees = buyFees.plus(buy.fee.multiply(quantityToSell / buy.quantity));
       remainingQuantity -= quantityToSell;

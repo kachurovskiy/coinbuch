@@ -24,7 +24,16 @@ export class SectionYear {
     securityTable.appendChild(securityThead);
     const securityHeaderRow = document.createElement('tr');
     securityThead.appendChild(securityHeaderRow);
-    const securityHeaders = ['Security', 'First buy', 'Last sell', 'Gain ' + printCurrency(this.model.exchange.targetCurrency)];
+    const securityHeaders = [
+      'Security',
+      'First buy',
+      'Last sell',
+      'Cost Basis',
+      'Cost Basis ' + printCurrency(this.model.exchange.targetCurrency),
+      'Proceeds',
+      'Proceeds ' + printCurrency(this.model.exchange.targetCurrency),
+      'Gain ' + printCurrency(this.model.exchange.targetCurrency),
+    ];
     for (const header of securityHeaders) {
       const th = document.createElement('th');
       th.innerText = header;
@@ -32,12 +41,31 @@ export class SectionYear {
       securityHeaderRow.appendChild(th);
     }
 
-    const securityMapInTargetCurrency = new Map<string, Money>();
+    const costBasisMap = new Map<string, Money>();
+    const costBasisMapTarget = new Map<string, Money>();
+    const proceedsMap = new Map<string, Money>();
+    const proceedsMapTarget = new Map<string, Money>();
+
     for (const transaction of this.transactions) {
+      if (!TransactionSellTypes.includes(transaction.type)) continue;
       const key = transaction.asset;
-      const gainLossInTargetCurrency = securityMapInTargetCurrency.get(key) || new Money(0, this.model.exchange.targetCurrency);
-      const convertedGainLoss = transaction.gainOrLoss.convert(transaction.time, this.model.exchange);
-      securityMapInTargetCurrency.set(key, gainLossInTargetCurrency.plus(convertedGainLoss));
+
+      let costBasis = costBasisMap.get(key) || new Money(0, transaction.priceCurrency);
+      let costBasisTarget = costBasisMapTarget.get(key) || new Money(0, this.model.exchange.targetCurrency);
+      for (const buy of transaction.buyTransactions) {
+        const cb = buy.transaction.total.multiply(buy.quantity / buy.transaction.quantity);
+        costBasis = costBasis.plus(cb);
+        costBasisTarget = costBasisTarget.plus(cb.convert(buy.transaction.time, this.model.exchange));
+      }
+      costBasisMap.set(key, costBasis);
+      costBasisMapTarget.set(key, costBasisTarget);
+
+      let proceeds = proceedsMap.get(key) || new Money(0, transaction.priceCurrency);
+      let proceedsTarget = proceedsMapTarget.get(key) || new Money(0, this.model.exchange.targetCurrency);
+      proceeds = proceeds.plus(transaction.total.convert(transaction.time, this.model.exchange, proceeds.currency));
+      proceedsTarget = proceedsTarget.plus(transaction.total.convert(transaction.time, this.model.exchange));
+      proceedsMap.set(key, proceeds);
+      proceedsMapTarget.set(key, proceedsTarget);
     }
 
     const firstBuyMap = new Map<string, Date>();
@@ -57,7 +85,7 @@ export class SectionYear {
       }
     }
 
-    for (const [security, gainLoss] of securityMapInTargetCurrency) {
+    for (const [security] of costBasisMap) {
       const row = document.createElement('tr');
       securityTable.appendChild(row);
 
@@ -78,10 +106,23 @@ export class SectionYear {
       if (lastSellDate) lastSellCell.innerText = lastSellDate.toISOString().split('T')[0];
       row.appendChild(lastSellCell);
 
-      const gainLossInTargetCurrencyCell = document.createElement('td');
-      gainLossInTargetCurrencyCell.innerText = gainLoss.toFixed(2);
-      gainLossInTargetCurrencyCell.classList.add(gainLoss.amount > 0 ? 'positive' : 'negative');
-      row.appendChild(gainLossInTargetCurrencyCell);
+      // Cost Basis
+      const costBasis = costBasisMap.get(security) || new Money(0, this.model.exchange.targetCurrency);
+      row.appendChild(createTd(costBasis));
+
+      const costBasisTarget = costBasisMapTarget.get(security) || new Money(0, this.model.exchange.targetCurrency);
+      row.appendChild(createTd(costBasisTarget));
+
+      // Proceeds
+      const proceeds = proceedsMap.get(security) || new Money(0, this.model.exchange.targetCurrency);
+      row.appendChild(createTd(proceeds));
+
+      const proceedsTarget = proceedsMapTarget.get(security) || new Money(0, this.model.exchange.targetCurrency);
+      row.appendChild(createTd(proceedsTarget));
+
+      // Gain
+      const gainTarget = proceedsTarget.minus(costBasisTarget);
+      row.appendChild(createTd(gainTarget, true));
     }
 
     // Sort all rows in securityTable by first cell (security name) asc.
@@ -100,13 +141,28 @@ export class SectionYear {
     totalRow.appendChild(totalCell);
     totalRow.appendChild(document.createElement('td'));
     totalRow.appendChild(document.createElement('td'));
+    totalRow.appendChild(document.createElement('td'));
 
-    const totalGainLossInTargetCurrency = document.createElement('td');
-    const gainLossSumInTargetCurrency = this.transactions.reduce((total, t) => total.plus(t.gainOrLoss.convert(t.time, this.model.exchange)), new Money(0, this.model.exchange.targetCurrency));
-    totalGainLossInTargetCurrency.innerText = gainLossSumInTargetCurrency.toFixed(2);
-    totalGainLossInTargetCurrency.classList.add(gainLossSumInTargetCurrency.amount > 0 ? 'positive' : 'negative');
-    totalRow.appendChild(totalGainLossInTargetCurrency);
+    const totalCostBasisTarget = Array.from(costBasisMapTarget.values()).reduce((a, b) => a.plus(b), new Money(0, this.model.exchange.targetCurrency));
+    totalRow.appendChild(createTd(totalCostBasisTarget));
+
+    totalRow.appendChild(document.createElement('td'));
+
+    const totalProceedsTarget = Array.from(proceedsMapTarget.values()).reduce((a, b) => a.plus(b), new Money(0, this.model.exchange.targetCurrency));
+    totalRow.appendChild(createTd(totalProceedsTarget));
+
+    const totalGainTarget = totalProceedsTarget.minus(totalCostBasisTarget);
+    totalRow.appendChild(createTd(totalGainTarget, true));
 
     return result;
   }
+}
+
+function createTd(money: Money, addClass: boolean = false): HTMLTableCellElement {
+  const td = document.createElement('td');
+  td.innerText = money.toFixed(2);
+  if (addClass) {
+    td.classList.add(money.amount > 0 ? 'positive' : 'negative');
+  }
+  return td;
 }
