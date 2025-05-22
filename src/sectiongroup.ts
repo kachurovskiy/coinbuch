@@ -42,7 +42,11 @@ export class SectionGroup {
     const preamble = document.createElement('div');
     preamble.className = 'print-section';
     preamble.style.display = 'none';
-    preamble.innerHTML = `<h2>Excerpt from the Coinbase transaction analysis report</h2><p>This document was prepared by the <a href="https://github.com/kachurovskiy/coinbuch">coinbuch tool</a> on ${new Date().toISOString()} based on Coinbase transaction file ${this.model.name}</p>`;
+    preamble.innerHTML = `<h2>Excerpt from the Coinbase transaction analysis report</h2>
+    <p>This document was prepared by the <a href="https://github.com/kachurovskiy/coinbuch">coinbuch
+    tool</a> on ${new Date().toISOString()} based on Coinbase transaction file ${this.model.name}</p>
+    <p>Gains in different currencies don't match because proceeds and cost basis are calculated with exchange
+    rate on the day of sell and buy transaction respectively using rates from Coinbase.</p>`;
     result.appendChild(preamble);
 
     this.transactions.sort((a, b) => a.time.getTime() - b.time.getTime());
